@@ -7,7 +7,6 @@
 // @author       eli / frozenpandaman
 // @match        https://letterboxd.com/film/*
 // @icon         https://letterboxd.com/favicon.ico
-
 // @grant        none
 // ==/UserScript==
 
