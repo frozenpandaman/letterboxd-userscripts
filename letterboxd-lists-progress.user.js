@@ -3,7 +3,7 @@
 // @name         Letterboxd Lists Progress
 // @namespace    https://github.com/frozenpandaman
 // @version      0.1 (0.2)
-// @description  Displays liat progress underneath cover art.
+// @description  Displays list progress underneath cover art.
 // @author       eli / frozenpandaman
 // @match        https://letterboxd.com/*
 // @icon         https://letterboxd.com/favicon.ico
