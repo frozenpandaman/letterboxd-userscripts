@@ -2,7 +2,7 @@
 /* globals jQuery, $, waitForKeyElements */
 // @name         Friends Average for Letterboxd
 // @namespace    https://github.com/frozenpandaman
-// @version      0.1 (0.9.1)
+// @version      0.2 (0.9.1)
 // @description  Shows a histogram and ratings average for just the users you follow, in addition to the global one.
 // @author       eli / frozenpandaman
 // @match        https://letterboxd.com/film/*
@@ -142,9 +142,6 @@ let prepContent = function (table, user_movie) {
     var avg_1;
     var avg_2;
     var rating;
-    console.log('Ratings:', rating_list);
-    console.log('Person Count:', table[2]);
-    console.log('Like Count:', table[3]);
     if (votes == 0) {
         avg_1 = '–.–';
         avg_2 = '–.–';
@@ -159,7 +156,6 @@ let prepContent = function (table, user_movie) {
         avg_2 = avg.toFixed(2);
     }
 
-    console.log('Average Rating:', avg_1);
     var href_head = user_movie[0] + 'friends/film/' + user_movie[1];
     var href_likes = user_movie[0] + 'friends/film/' + user_movie[1] + '/likes/';
     if (votes == 1) {
@@ -242,7 +238,6 @@ let injectContent = function (html) {
 
     let path = $('.sidebar');
     $(html).appendTo(path);
-    console.log('Injected')
     return true;
 }
 
@@ -276,7 +271,6 @@ let main = async () => {
         let newURL = 'https://letterboxd.com' + user + 'friends/film/' + movie;
         getContent(newURL, user_movie);
         widths = await getWidths();
-        console.log('221', widths)
         return widths
     }
 }
