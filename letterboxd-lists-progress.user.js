@@ -90,7 +90,7 @@ let passByLists = function () {
 			$progress.find(".lf-progress-percentage").text($where.find(".progress-percentage").text());
 			$progress.find(".lf-progress-bar").css({"width": $where.find(".progress-percentage").text() + "%"});
 			$progress.find(".lf-progress-count").text($where.find(".js-progress-count").text());
-			$progress.find(".lf-progress-total").text($where.find(".progress-count").text().match(/of ([0-9]+)/)[1]);
+			$progress.find(".lf-progress-total").text($where.find(".progress-count").text().match(/of ([0-9|,]+)/)[1]);
 
 			$self.after($progress).addClass("lf-no-margin");
 		});
