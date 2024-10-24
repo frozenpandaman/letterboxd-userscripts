@@ -68,7 +68,7 @@ let getinfo = async () => {
     var main_nav = $('.main-nav').html();
     if (typeof main_nav == 'undefined') {
         await sleep(100);
-        getinfo();
+        return getinfo();
     }
     else {
         let movie_link = $('meta[property="og:url"]').attr('content');
@@ -225,7 +225,7 @@ let prepContent = function (table, user_movie) {
     for (let i = 1; i < 11; i++) {
         let id = '#a' + i
         let i_str = '<i id = "i' + i + '" style=" height: ' + relative_rating[i - 1] + 'px;"></i>'
-        $(html).find(id).attr('href', href_head);
+        $(html).find(id).attr('href', href_head+'/rated/'+ (0.5 * i).toString() +'/');
         $(html).find(id).text(rat[i - 1]);
         $(html).find(id).append($.parseHTML(i_str));
     }
