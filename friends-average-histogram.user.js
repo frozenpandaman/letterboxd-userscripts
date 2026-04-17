@@ -1,283 +1,317 @@
 // ==UserScript==
-/* globals jQuery, $, waitForKeyElements */ // eslint-disable-line
+/* globals jQuery, $, waitForKeyElements */
 // @name         Friends Average for Letterboxd
 // @namespace    https://github.com/frozenpandaman
-// @version      1.2.1
-// @description  Shows a histogram and ratings average for just the users you follow, in addition to the global one
-// @author       eli / frozenpandaman
+// @version      1.3
+// @description  Shows a histogram and ratings average for just the users you follow, in addition to the global one.
+// @author       eli (frozenpandaman)
 // @match        https://letterboxd.com/film/*
 // @icon         https://letterboxd.com/favicon.ico
+// @grant        none
 // ==/UserScript==
 
-// This userscript is a port of the "Friends Average for Letterboxd" Chrome extension (ver. 1.2 updated on May 23, 2025) by Klaspas
+// This userscript is a port of the "Friends Average for Letterboxd" Chrome extension by Klaspas, with fixes made by frozenpandaman
 
-'use strict';
-window.addEventListener('load', function (e) {
-    var element = e.srcElement;
-    let single = $(element).attr('id')
-    let double = $(element).parent().attr('id')
-    if (ids.includes(double) || ids.includes(single)) {
-        var position;
-        var arrow;
-        var text;
-        var li_nr;
-        if (single == 'a11') {
-            text = $(element).data('popup');
-            li_nr = 11;
-            // let width = $('#aad').width();
-            position = - (Number(widths[li_nr - 1]) * 3 / 4) + 190;
-            arrow = "left: 145px"
-        }
-
-        else {
-            text = $(element).text();
-            if (text == '') {
-                text = $(element).parent().text();
-            }
-            li_nr = Number(single.replace('a', ''));
-            if (isNaN(li_nr)) {
-                li_nr = Number(double.replace('a', ''));
-            }
-            // let width = $('#aad').width();
-            position = - (Number(widths[li_nr - 1]) / 2) + (li_nr * 16) - 7.5;
-            arrow = "left: 50%";
-        }
-
-        $('#popup1').attr('style', 'display: block; top: -3px; left:' + position + 'px;')
-        $('#popup2').attr('style', arrow)
-        $('#aad').text(text);
-    }
-    else {
-        $('#popup1').attr('style', 'display: none');
-    }
-}, false);
-
-let sleep = function (ms) {
+const sleep = (ms) =>{
     return new Promise(resolve => setTimeout(resolve, ms));
 };
 
-let getHTML = function (url) {
+const getHTML = (url) => {
     return fetch(url).then(result => { return result.text() })
 };
 
+const getNextPageUrl = (html) => {
+    return html.find('.next').closest('a').attr('href') || null;
+};
 
-let getinfo = async () => {
+const notloggedIn = () => {
+    console.log("Friends Average for Letterboxd extension info:\nThis extension only works if the user is logged in!")
+};
+
+const getUserandMovie = async (retries = 5) => {
     // Gets Username and movie from the current site
-    var main_nav = $('.main-nav').html();
-    if (typeof main_nav == 'undefined') {
+    const mainNavHTML = $('.main-nav').html();
+    if (typeof mainNavHTML == 'undefined') {
+        if (retries <= 0) return null;
         await sleep(100);
-        let user_movie = getinfo();
-        return user_movie
+        return getUserandMovie(retries - 1);
     }
-    else {
-        let movie_link = $('meta[property="og:url"]').attr('content');
-        let url_part = movie_link.split('film/')[1].split('/')[1];
-        let exclude = ['members', 'likes', 'reviews', 'ratings', 'fans', 'lists'];
-        if (!exclude.includes(url_part)) {
-            let movie = movie_link.match('(?<=film\/)(.*?)(?=\/)')[0];
-            let user_link = $('a:contains("Profile")').parent().html();
-            let user = $(user_link).attr('href');
-            if (typeof user !== 'undefined') {
-                return [user, movie];
-            }
-        }
-        return null;
-    }
-}
 
-let getContent = async (url, user_movie) => {
-    var rating_list = [];
-    var person_count = 0
-    var like_count = 0;
-    while (true) {
-        if (url !== 'undefined') {
-            let html = getHTML(url);
-            let table = await html.then(function (html) {
-                let tbody = $(html).find('tbody').html();
-                if (typeof tbody !== 'undefined') {
-                    let table = '<tbody>' + tbody + '</tbody>';
-                    $(table).find('tr').each(function () {
-                        let person = $(this).find(".name").attr('href');
-                        if (person !== user_movie[0]) {
-                            let rating = $(this).find(".rating").attr('class')
-                            person_count += 1;
-                            let like = $(this).find('.icon-liked').html();
-                            if (typeof like !== 'undefined') {
-                                like_count += 1;
-                            }
-                            if (typeof rating !== 'undefined' && rating.length > 18) {
-                                rating = rating.split('rated-')[1];
-                                rating_list.push(Number(rating));
-                            }
-                        }
-                    });
-                }
-                let next_page_loc = $(html).find('.next').parent().html();
-                let next_page = $(next_page_loc).attr('href');
-                return [next_page, rating_list, person_count, like_count];
+    const movieLink = $('meta[property="og:url"]').attr('content');
+    if (!movieLink) return null;
 
-            })
-            if (typeof table[0] == 'undefined') {
-                if (table[1].length == 0 & table[3] == 0) {
-                    break;
-                }
-                else {
-                    prepContent(table, user_movie);
-                    return true;
-                }
-            }
-            else {
-                url = 'https://letterboxd.com' + table[0];
-            }
+    const urlParts = movieLink.split('film/');
+    if (urlParts.length < 2) return null;
+
+    const urlSubParts = urlParts[1].split('/');
+    const urlPart = urlSubParts[1];
+    const exclude = ['members', 'likes', 'reviews', 'ratings', 'fans', 'lists'];
+    if (exclude.includes(urlPart)) return null;
+
+    const movie = movieLink.match('(?<=film\/)(.*?)(?=\/)')[0];
+    const userLink = $('a:contains("Profile")').parent().html();
+    const user = $(userLink).attr('href');
+    if (!user) return null;
+
+    return [user, movie];
+};
+
+const getRatingsPage = async (url, selfUser, movie) => {
+    const ratingList = [];
+    let personCount = 0
+    let likeCount = 0;
+
+    while (url && url !== 'undefined') {
+
+        const html = await getHTML(url);
+
+        const tbody = $(html).find('tbody').html();
+        if (!tbody) return;
+
+        const rows = extractTableRows($(html));
+
+        for (const row of rows) {
+            const result = extractRatings(row, selfUser);
+            if (!result) continue
+
+            const [ rating, liked ] = result;
+            personCount++;
+            if (rating) ratingList.push(rating);
+            if (liked) likeCount++;
         }
+
+        const nextPage = getNextPageUrl($(html))
+        if (!nextPage) {
+            if (ratingList.length === 0 && likeCount === 0) {
+                console.log("Friends Average for Letterboxd extension info:\nNo ratings and likes from your friends for this film, so nothing to show.")
+                return
+            };
+            return [ ratingList, personCount, likeCount ]
+        }
+        url = `https://letterboxd.com${nextPage}`;
 
 
     }
 };
 
-let prepContent = function (table, user_movie) {
-    var rating_list = table[1];
-    var votes = rating_list.length;
-    var avg;
-    var avg_1;
-    var avg_2;
-    var rating;
-    console.log('Ratings:', rating_list);
-    console.log('Person Count:', table[2]);
-    console.log('Like Count:', table[3]);
-    if (votes == 0) {
-        avg_1 = '–.–';
-        avg_2 = '–.–';
-    }
-    else {
-        let sum = 0;
-        for (var r of rating_list) {
-            sum += r;
-        }
-        avg = sum / (votes * 2);
-        avg_1 = avg.toFixed(1);
-        avg_2 = avg.toFixed(2);
+const extractRatings = ($row, currentUser) => {
+    const person = $row.find('.name').attr('href');
+    let rating = null;
+    if (person === currentUser) return null;
+
+    const liked = $row.find('.icon-liked').length > 0;
+
+    const ratingClass = $row.find('.rating').attr('class') || '';
+    const ratingMatch = ratingClass.match(/rated-(\d+)/); // finds string 'rated-' with one or more digits
+    if (ratingMatch) {
+        rating = Number(ratingMatch[1])
     }
 
-    console.log('Average Rating:', avg_1);
-    var href_head = user_movie[0] + 'friends/film/' + user_movie[1];
-    var href_likes = user_movie[0] + 'friends/film/' + user_movie[1] + '/likes/';
-    if (votes == 1) {
-        rating = 'rating';
+    return [ rating, liked ];
+};
+
+const extractTableRows = ($html) => {
+    const tbody = $html.find('tbody').html();
+    if (!tbody) return [];
+
+    const rowsTable = $('<tbody>' + tbody + '</tbody>');
+    const rows = [];
+
+    rowsTable.find('tr').each(function () {
+        rows.push($(this));
+    });
+    return rows;
+};
+
+const calculateAverages = (ratingList) => {
+    const votes = ratingList.length;
+    if (votes === 0) {
+        return [ null , votes ];
     }
-    else {
-        rating = 'ratings';
+    const sum = ratingList.reduce((acc, r) => acc + r, 0);
+    const avg = sum / (votes * 2);
+    return [ avg, votes ];
+};
+
+const getRatingCounts = (ratingList) => {
+    const counts = Array(10).fill(0); // start with [0,0,...,0]
+    for (const r of ratingList) {
+        counts[r - 1]++; // rating 1 goes to index 0
     }
-    var data_popup = 'Average of ' + avg_2 + ' based on ' + votes + ' ' + rating;
-    let rating_count = [];
-    for (let i = 1; i < 11; i++) {
-        let count = 0;
-        for (rating of rating_list) {
-            if (rating == i) {
-                count += 1;
-            }
-        }
-        rating_count.push(count);
-    }
+    return counts;
+};
 
-    let max_rating = Math.max(...rating_count);
-    let relative_rating = [];
-    let percent_rating = [];
+const getRelativeAndPercentRatings = (ratingCounts, votes) => {
+    const maxRating = Math.max(...ratingCounts);
+    const relative = ratingCounts.map(count => {
+        let height = (count / maxRating) * 44.0;
+        return (height < 1 || !isFinite(height)) ? 1 : height;
+    });
+    const percent = ratingCounts.map(count =>
+        votes > 0 ? Math.round((count / votes) * 100) : 0
+    );
+    return [ relative, percent ];
+};
 
-    for (rating of rating_count) {
-        let hight = (rating / max_rating) * 44.0;
-        if (hight < 1 || hight == Number.POSITIVE_INFINITY || isNaN(hight)) {
-            hight = 1;
-        }
-        relative_rating.push(hight);
-        let perc = Math.round((rating / votes) * 100);
-        percent_rating.push(perc);
-    }
+const formatRatingLabels = (ratingCounts, percentRatings) => {
+    const stars = ['half-★', '★', '★½', '★★', '★★½','★★★', '★★★½', '★★★★', '★★★★½', '★★★★★'];
+    return ratingCounts.map((count, i) => {
+        const label = count === 1 ? 'rating' : 'ratings';
+        return `${count} ${stars[i]} ${label} (${percentRatings[i]}%)`;
+    });
+};
 
-    let rat = [];
-    var stars = ['half-★', '★', '★½', '★★', '★★½', '★★★', '★★★½', '★★★★', '★★★★½', '★★★★★'];
-    for (let i = 1; i < 11; i++) {
-        if (rating_count[i - 1] == 1) {
-            rating = 'rating';
-        }
-        else {
-            rating = 'ratings';
-        }
-        let r_n = rating_count[i - 1] + ' ' + stars[i - 1] + ' ' + rating + ' ' + '(' + percent_rating[i - 1] + '%)';
-        rat.push(r_n);
-    };
+const buildHTMLStructure = (hrefHead, hrefLikes, likesText, avg1, dataPopup, ratingCounts, ratingLabels, maxRating) => {
+    const stars = ['half-★', '★', '★½', '★★', '★★½', '★★★', '★★★½', '★★★★', '★★★★½', '★★★★★'];
+    const starPath = 'M5.065.45c-.22-.61-.95-.59-1.14 0l-.75 2.57H.705c-.73 0-.96.62-.37 1.07l1.99 1.53-.76 2.49c-.22.73.34 1.16.93.71l2-1.53 2 1.53c.59.45 1.15.02.93-.71l-.76-2.49 1.99-1.53c.59-.45.39-1.07-.33-1.07h-2.48z';
+    const svgStart = '<svg xmlns="http://www.w3.org/2000/svg" role="graphics-symbol" class="glyph stars -start -rating" width="9" height="9" viewBox="0 0 9 9" aria-label="★"><title>★</title><path transform="translate(0,0)" fill-rule="evenodd" d="' + starPath + '"></path></svg>';
+    const svgEnd = '<svg xmlns="http://www.w3.org/2000/svg" role="graphics-symbol" class="glyph stars -end -rating" width="49" height="9" viewBox="0 0 49 9" aria-label="★★★★★"><title>★★★★★</title>' + [0,10,20,30,40].map(x => '<path transform="translate(' + x + ',0)" fill-rule="evenodd" d="' + starPath + '"></path>').join('') + '</svg>';
 
-
-    let str1 = '<section class="section ratings-histogram-chart"><h2 class="section-heading"><a href="" id="aaa" title="">Ratings from Friends</a></h2><a href="" id="aab" class="all-link more-link"></a><span class="average-rating" itemprop="aggregateRating" itemscope="" itemtype="http://schema.org/AggregateRating"><a href="" id="a11" class="tooltip display-rating -highlight" data-popup =""></a></span><div class="rating-histogram clear rating-histogram-exploded">        <span class="rating-green rating-green-tiny rating-1">            <span class="rating rated-2">★</span>        </span>        <ul>';
-    let str2 = '<li id="li1" class="rating-histogram-bar" style="width: 15px; left: 0px"> <a href="" id="a1" class="ir tooltip"</a> </li><li id="li2" class="rating-histogram-bar" style="width: 15px; left: 16px"><a href="" id="a2" class="ir tooltip"></a></li><li id="li3" class="rating-histogram-bar" style="width: 15px; left: 32px"><a href="" id="a3" class="ir tooltip"></a></li><li id="li4" class="rating-histogram-bar" style="width: 15px; left: 48px"><a href="" id="a4" class="ir tooltip"></a></li><li id="li5" class="rating-histogram-bar" style="width: 15px; left: 64px"><a href="" id="a5" class="ir tooltip"></a></li><li id="li6" class="rating-histogram-bar" style="width: 15px; left: 80px"><a href="" id="a6" class="ir tooltip"></a></li><li id="li7" class="rating-histogram-bar" style="width: 15px; left: 96px"><a href="" id="a7" class="ir tooltip"></a></li><li id="li8" class="rating-histogram-bar" style="width: 15px; left: 112px"><a href="" id="a8" class="ir tooltip"></a></li><li id="li9" class="rating-histogram-bar" style="width: 15px; left: 128px"><a href="" id="a9" class="ir tooltip"></a></li><li id="li10" class="rating-histogram-bar" style="width: 15px; left: 144px"><a href="" id="a10" class="ir tooltip"></a></li></ul><span class="rating-green rating-green-tiny rating-5"><span class="rating rated-10">★★★★★</span></span></div>';
-    let str3 = '<div class="twipsy fade above in" id="popup1", style="display: none"> <div id="popup2" class="twipsy-arrow" style="left: 50%;"></div> <div id = "aad" class="twipsy-inner"></div> </div> </section>';
-    let str = str1 + str2 + str3;
-
-    var html = $.parseHTML(str);
-    $(html).find('#aaa').attr('href', href_head);
-    $(html).find('#aab').attr('href', href_likes);
-    if (table[3] == 1) {
-        $(html).find('#aab').text('1 like');
-    }
-    else {
-        $(html).find('#aab').text(table[3] + ' likes');
-    }
-    $(html).find('#a11').attr('href', href_head);
-    $(html).find('#a11').attr('data-popup', data_popup);
-    $(html).find('#a11').text(avg_1);
-
-    for (let i = 1; i < 11; i++) {
-        let id = '#a' + i
-        let i_str = '<i id = "i' + i + '" style=" height: ' + relative_rating[i - 1] + 'px;"></i>'
-        $(html).find(id).attr('href', href_head);
-        $(html).find(id).text(rat[i - 1]);
-        $(html).find(id).append($.parseHTML(i_str));
+    let barsHtml = '';
+    for (let i = 0; i < 10; i++) {
+        const value = maxRating > 0 ? ratingCounts[i] / maxRating : 0;
+        barsHtml +=
+            '<tr class="column" style="--value:' + value + ';">' +
+            '<th scope="row" class="_sr-only">' + stars[i] + '</th>' +
+            '<td class="cell">' +
+            '<a href="' + hrefHead + '" id="a' + (i+1) + '" class="barcolumn tooltip" data-popup="' + ratingLabels[i].replace(/"/g, '&quot;') + '">' +
+            '<span class="_sr-only">' + ratingLabels[i] + '</span>' +
+            '<span class="bar"><span class="fill"></span></span>' +
+            '</a>' +
+            '</td>' +
+            '</tr>';
     }
 
-    injectContent(html);
-    return true;
-}
+    const str =
+        '<section class="section ratings-histogram-chart">' +
+        '<header class="section-header -divider -spaced-loose">' +
+        '<h2 class="section-heading -omitdivider heading"><a href="' + hrefHead + '">Your Friends</a></h2>' +
+        '<aside class="aside"><div class="section-accessories">' +
+        '<a href="' + hrefLikes + '" class="accessory">' + likesText + '</a>' +
+        '</div></aside>' +
+        '</header>' +
+        '<div class="rating-histogram"><div class="layout">' +
+        svgStart +
+        '<table class="chart"><caption class="_sr-only">Rating Distribution</caption>' +
+        '<thead class="_sr-only"><tr><th scope="col">Rating</th><th scope="col">Count</th></tr></thead>' +
+        '<tbody class="plot">' + barsHtml + '</tbody></table>' +
+        svgEnd +
+        '<a href="' + hrefHead + '" id="a11" class="averagerating tooltip" data-popup="' + dataPopup + '">' + avg1 + '</a>' +
+        '</div></div>' +
+        '<div class="twipsy fade above in" id="popup1" style="display:none"><div id="popup2" class="twipsy-arrow" style="left:50%;"></div><div id="aad" class="twipsy-inner"></div></div>' +
+        '</section>';
 
-let injectContent = function (html) {
+    return $.parseHTML(str);
+};
+//new
+const prepareHTML = (table, user, movie) => {
+    const ratingList = table[0];
+    const likeCount = table[2];
 
-    let path = $('.sidebar');
+    const [ avg, votes ] = calculateAverages(ratingList);
+    const ratingCounts = getRatingCounts(ratingList);
+    const [ , percentRatings ] = getRelativeAndPercentRatings(ratingCounts, votes);
+    const ratingLabels = formatRatingLabels(ratingCounts, percentRatings);
+
+    if (debug) {
+        console.log('Ratings:', ratingList);
+        console.log('Person Count:', table[1]);
+        console.log('Votes Count:', votes);
+        console.log('Like Count:', likeCount);
+        console.log('Average Rating:', avg.toFixed(3));
+    }
+
+    const avg1 = avg ? avg.toFixed(1) : '–.–';
+    const avg2 = avg ? avg.toFixed(2) : '–.–';
+
+    const hrefHead = `https://letterboxd.com${user}friends/film/${movie}`;
+    const hrefLikes = `${hrefHead}/likes/`;
+    const dataPopup = `Average of ${avg2} based on ${votes} ${votes === 1 ? 'rating' : 'ratings'}`;
+    const likesText = `${likeCount} ${likeCount === 1 ? 'like' : 'likes'}`;
+    const maxRating = Math.max(...ratingCounts);
+
+    return buildHTMLStructure(hrefHead, hrefLikes, likesText, avg1, dataPopup, ratingCounts, ratingLabels, maxRating);
+};
+
+const injectHTML = (html) => {
+    const path = $('.sidebar');
     $(html).appendTo(path);
-    return true;
-}
+};
 
-let getWidths = async () => {
-    var ids = ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9', 'a10'];
-    var widths = []
-    $('#popup1').attr('style', 'display: block; top: -3px; left: -10px;')
+const getWidths = async () => {
+    const ids = ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9', 'a10'];
+    const widthList = [];
+    const popup = $('#popup1');
+    const aad = $('#aad');
 
-    for (var a of ids) {
-        let id = '#' + a;
-        let text = $(id).text();
-        $('#aad').text(text);
-        let width = $('#aad').width();
-        widths.push(width)
+    popup.css({display: 'block', top: '-3px', left: '-10px'});
+
+    for (const id of ids) {
+        const text = $(`#${id}`).data('popup');
+        aad.text(text);
+        widthList.push(aad.width());
     }
 
-    let text = $('#a11').data('popup')
-    $('#aad').text(text);
-    let width = $('#aad').width();
-    widths.push(width);
+    const extraText = $('#a11').data('popup');
+    aad.text(extraText);
+    widthList.push(popup.outerWidth());
 
-    $('#popup1').attr('style', 'display: none')
+    popup.css('display', 'none');
+    return widthList
+};
+
+const main = async () => {
+    const userMovie = await getUserandMovie();
+    if (!userMovie) {
+        notloggedIn();
+        return;
+    }
+    const [user, movie] = userMovie;
+    const newURL = `https://letterboxd.com${user}friends/film/${movie}`;
+    const results = await getRatingsPage(newURL, user);
+    if (!results) return;
+    const html = prepareHTML(results, user, movie);
+    injectHTML(html);
+    const widths = await getWidths();
     return widths
-}
+};
 
-let main = async () => {
-    var user_movie = await getinfo();
-    if (user_movie !== null && typeof user_movie !== 'undefined') {
-        var user = user_movie[0];
-        var movie = user_movie[1];
-        let newURL = 'https://letterboxd.com' + user + 'friends/film/' + movie;
-        getContent(newURL, user_movie);
-        let widths = await getWidths();
-        return widths;
+let barWidths = null;
+var debug = true;
+(
+    async () => {
+    barWidths = await main();
     }
-}
+)();
 
-var widths = main();
-var ids = ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9', 'a10', 'a11'];
+document.addEventListener(
+    'mousemove', (e) => {
+        if (!barWidths) return;
+
+        const element = $(e.target).closest('#a1,#a2,#a3,#a4,#a5,#a6,#a7,#a8,#a9,#a10,#a11');
+        if (!element.length) {
+            $('#popup1').attr('style', 'display: none');
+            return;
+        }
+
+        const id = element.attr('id');
+        const text = element.data('popup');
+        let position;
+        let arrow;
+
+        if (id === 'a11') {
+            const offsetParentLeft = $('#a1').offsetParent().offset().left;
+            const a11Center = element.offset().left + element.outerWidth() / 2 - offsetParentLeft;
+            position = a11Center - Number(barWidths[10]) / 2;
+            arrow = 'left: 50%';
+        } else {
+            const liNr = Number(id.replace('a', ''));
+            position = -(Number(barWidths[liNr - 1]) / 2) + (liNr * 16) - 7.5;
+            arrow = 'left: 50%';
+        }
+
+        $('#popup1').attr('style', 'display: block; top: -3px; left:' + position + 'px;');
+        $('#popup2').attr('style', arrow);
+        $('#aad').text(text);
+    }, false
+);
